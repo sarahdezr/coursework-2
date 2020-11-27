@@ -1,0 +1,79 @@
+from scada import DAQ
+import numpy as np
+from matplotlib import pyplot as plt
+from blinkstick import blinkstick
+from datetime import datetime
+
+my_daq = DAQ()
+my_daq.connect('coursework')
+my_daq.trigger()
+        
+def light_color():
+    led = blinkstick.find_first()
+    led_color = {
+        0 : 'red', 
+        1 : 'green'
+        }
+    return led_color, led
+
+def led_turn_on(color):
+    led_color, led = light_color()
+    led.set_color(index = 0, name = led_color[color])
+    
+def switch_off():
+    led_color, led = light_color()
+    for i in range(2):
+        led.set_color(index = i, name = "black")
+    
+    
+def alarm(filter_signal):
+    if filter_signal > 4.27:
+        led_turn_on(1)
+    elif filter_signal < -2.56:
+        led_turn_on(0)
+    else:
+        switch_off()
+
+def volts():
+    time,voltage = my_daq.next_reading()
+    voltage = my_daq.Q*voltage - my_daq.REF_HIGH
+    reference_date = datetime(2020, 11, 27)
+    reference_seconds = (time- reference_date).total_seconds()
+    print(voltage)
+    return reference_seconds, voltage
+    
+def plot_measurements(time_list, voltage_list):
+    maximum = [4.27] * 120
+    minimum = [-2.56] * 120
+    #plt.axis([0,70, -5.5, 5.5])
+    figure = plt.subplots(figsize = (16,14))
+    plt.plot(time_list, voltage_list, 'b', label = 'Voltage Level')
+    plt.plot( time_list, maximum ,'g', label = 'Maximum Voltage Level' )
+    plt.plot( time_list,minimum , 'r', label = 'Minimum Voltage Level')
+    plt.title('Voltage variation with time')
+    plt.xlabel('Time')
+    plt.ylabel('Voltage(V)')
+    plt.legend(loc = 'lower right')
+    plt.show()
+    
+def main():
+    time_list, voltage_list, reference_time = [] , [], []
+    for t in range(120):
+        reference_seconds, voltage = volts()
+        if t != 0:
+            time_list.append(reference_seconds-reference_time[0])
+        else:
+            reference_time.append(reference_seconds)
+            time_list.append(reference_time[0]-reference_time[0])
+        if t != 0:
+            if voltage - voltage_list[-1] < 0.08:
+                voltage_list.append((voltage + voltage_list[-1]) / 2)
+            else:
+                voltage_list.append(voltage)
+        else:
+            voltage_list.append(voltage)     
+        alarm(voltage_list[t])
+    plot_measurements(time_list, voltage_list)
+    switch_off()
+
+main()
