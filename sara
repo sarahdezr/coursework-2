@@ -1,0 +1,108 @@
+from scada import DAQ
+import numpy as np
+from matplotlib import pyplot as plt
+from blinkstick import blinkstick
+from datetime import datetime
+import time
+
+my_daq = DAQ()
+my_daq.connect('coursework')
+my_daq.trigger()
+        
+def light_color():
+    led = blinkstick.find_first()
+    led_color = {
+        0 : 'red', 
+        1 : 'green'
+        }
+    return led_color, led
+
+def led_turn_on(color):
+    led_color, led = light_color()
+    led.set_color(index = 0, name = led_color[color])
+    
+def switch_off():
+    led_color, led = light_color()
+    for i in range(2):
+        led.set_color(index = i, name = "black")
+    
+    
+def alarm(filter_signal, time_ref, green , red):
+   
+    if filter_signal > 4.27:
+        led_turn_on(1)
+        if filter_signal > 4.27 and not green:
+            print(f"Alert! over high at time {time_ref} s")
+            green, red = True, False
+    elif filter_signal < -2.56:
+        led_turn_on(0)
+        if filter_signal < -2.56 and not red:
+            print(f"Alert! under low at time {time_ref} s")
+            green, red = False, True
+    elif -2.56<filter_signal<4.27:
+        switch_off()
+        if green or red:
+            print(f"okey level {time_ref} s")
+            green, red = False, False
+        
+    return green, red
+
+def volts():
+    time,voltage = my_daq.next_reading()
+    voltage = my_daq.Q*voltage - my_daq.REF_HIGH
+    reference_date = datetime(2020, 11, 27)
+    reference_seconds = (time- reference_date).total_seconds()
+    print(voltage)
+    return reference_seconds, voltage
+
+
+def plot_measurements(time_list, voltage_list, t):
+
+
+    #esto es para borrar el grafico anterior
+    plt.cla()
+    
+    #figure = plt.subplots(figsize = (16,14))
+    plt.axis([0,70, -5.5, 5.5])
+    plt.plot( [0,70], [4.27,4.27],'g', label = 'Maximum Voltage Level' )
+    plt.plot( [0,70],[-2.56,-2.56], 'r', label = 'Minimum Voltage Level')
+    
+    plt.plot(time_list, voltage_list, 'b', label = 'Voltage Level')
+    
+    plt.title('Voltage variation with time')
+    plt.xlabel('Time')
+    plt.ylabel('Voltage(V)')
+    plt.legend(loc = 'lower right')
+    plt.show()
+    #es necesario hace un apausa para volver a plotearlo
+    plt.pause(0.000001)
+    
+def main():
+    time_list, voltage_list, reference_time = [] , [], []
+    start = time.time()
+    green , red = False, False
+    for t in range(120):
+        reference_seconds, voltage = volts()
+        if t != 0:
+            if (t+1)/5 ==(t+1)//5:
+                plot_measurements(time_list, voltage_list, t)
+            time_list.append(reference_seconds-reference_time[0])
+
+        else:
+            reference_time.append(reference_seconds)
+            time_list.append(reference_time[0]-reference_time[0])
+
+        if t != 0:
+            if voltage - voltage_list[-1] < 0.08:
+                voltage_list.append((voltage + voltage_list[-1]) / 2)
+            else:
+                voltage_list.append(voltage)
+        else:
+            voltage_list.append(voltage)  
+            plot_measurements(time_list, voltage_list, t)
+        green , red = alarm(voltage_list[t], time_list[t], green, red)
+    end = time.time()
+    print(start- end)
+    switch_off()
+
+main()
